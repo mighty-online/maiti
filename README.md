@@ -1,2 +1,2 @@
-# MAITI
-The Mighty Artificial Intelligence Threading Interface
+# Tranquil Tempest
+The ISMCTS-based Mighty AI
