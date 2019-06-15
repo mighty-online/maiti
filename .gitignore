@@ -89,9 +89,6 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-# Added custom venv directories
-venv_mac/
-venv_ubuntu/
 
 # Spyder project settings
 .spyderproject
