@@ -6,6 +6,8 @@ and distributes actual work for the AI agents by running the AI worker module, t
 Development will start once tempest.py is ready
 """
 
+import tempest
+
 __author__ = "Jake Hyun (SyphonArch)"
 __copyright__ = "Copyright 2019, The Mighty-Online Team"
 __credits__ = ["Jake Hyun (SyphonArch)"]
