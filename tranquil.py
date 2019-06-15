@@ -3,7 +3,7 @@
 This module handles incoming AI move requests from the backend server of Mighty-Online,
 and distributes actual work for the AI agents by running the AI worker module, tempest.py, on multiple threads.
 
-Development started
+Development will start once tempest.py is ready
 """
 
 __author__ = "Jake Hyun (SyphonArch)"
