@@ -10,7 +10,7 @@ distributes them to the second module, described below.
 The second module, `tempest.py`, is the actual working AI behind Tranquil Tempest.
 It contains everything from the game logic of Mighty, all the way up to the ISMCTS algorithm.
 
-###Task list:
+#### Task list:
 - [ ] Create game logic
 - [ ] Implement ISMCTS
 - [ ] Implement `tranquil.py`
