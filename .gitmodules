@@ -1,0 +1,3 @@
+[submodule "game_logic"]
+	path = game_logic
+	url = https://github.com/mighty-online/game-logic.git

@@ -6,7 +6,7 @@ This module has been written in mind of being called from tranquil.py, the front
 Development started 2019/06/15
 """
 
-from game import *
+from game_logic import game
 
 __author__ = "Jake Hyun (SyphonArch)"
 __copyright__ = "Copyright 2019, The Mighty-Online Team"
