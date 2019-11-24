@@ -71,20 +71,26 @@ class Inference:
 
         return Inference(self.player, self.has, self.cardset + other.cardset)
 
+    def __iadd__(self, other):
+        assert self.player == other.player  # Can only add Inferences if the 'player' attributes are equal.
+        assert self.has == other.has  # Can only add Inferences if the 'has' attributes are equal.
+        self.cardset = self.cardset + other.cardset
+        return self
+
 
 class CardSet:
     """A class to represent a set of cards."""
 
     def __init__(self, info_string=None):
-        self.cards = []
+        self.cards = set()
 
         if info_string is not None:
             # If a single card is specified
             if info_string in game.cards:
-                self.cards.append(info_string)
+                self.cards.add(info_string)
             # If a suit is specified
             elif info_string in game.suits:
-                self.cards += [c for c in game.cards if c[0] == info_string]
+                self.cards += set([c for c in game.cards if c[0] == info_string])
             # If a rank is specified
             elif info_string in game.ranks:
                 self.cards += [c for c in game.cards if c[1] == info_string]
@@ -98,7 +104,7 @@ class CardSet:
 
     def __add__(self, other):
         new_set = CardSet()
-        new_set.cards = list(set(self.cards + other.cards))
+        new_set.cards = self.cards.union(other.cards)
         return new_set
 
     def __repr__(self):
