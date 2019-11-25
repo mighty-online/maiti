@@ -110,6 +110,12 @@ class CardSet:
     def __repr__(self):
         return 'CardSet object: {' + ', '.join(self.cards) + '}'
 
+def dumb_determinize(perspective: list) -> GameState:
+    """Randomly determinizes the given perspective into a deterministic state, NOT CONSIDERING PREVIOUS PLAYS.
+    
+    That is, it only looks at the current hand of the player and the rest is shuffled without consideration of what is possible or plausible.
+    """
+    pass
 
 def determinize(perspective: list, biased=False) -> GameState:
     """Determinize the given perspective into a deterministic state.
