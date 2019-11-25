@@ -7,6 +7,7 @@ Development started 2019/06/15
 """
 
 from game_logic import game
+from random import shuffle
 
 __author__ = "Jake Hyun (SyphonArch)"
 __copyright__ = "Copyright 2019, The Mighty-Online Team"
@@ -25,10 +26,11 @@ class GameState:
 
     # If 'point_cards' is left as None, it will automatically be constructed.
     # If 'inferences' is left as None, it will automatically be constructed.
-    def __init__(self, hands, tricks, suit_leds, setup, kitty, point_cards=None, inferences=None):
+    def __init__(self, hands, tricks, previous_suit_leds, suit_led, setup, kitty, point_cards=None, inferences=None):
         self.hands = hands
         self.tricks = tricks
-        self.suit_leds = suit_leds
+        self.previous_suit_leds = previous_suit_leds
+        self.suit_led = suit_led
 
         self.setup = setup
         self.declarer, self.trump, self.bid, self.friend_card, self.friend = self.setup  # unpacking setup
@@ -110,12 +112,6 @@ class CardSet:
     def __repr__(self):
         return 'CardSet object: {' + ', '.join(self.cards) + '}'
 
-def dumb_determinize(perspective: list) -> GameState:
-    """Randomly determinizes the given perspective into a deterministic state, NOT CONSIDERING PREVIOUS PLAYS.
-    
-    That is, it only looks at the current hand of the player and the rest is shuffled without consideration of what is possible or plausible.
-    """
-    pass
 
 def determinize(perspective: list, biased=False) -> GameState:
     """Determinize the given perspective into a deterministic state.
@@ -131,3 +127,17 @@ def determinize(perspective: list, biased=False) -> GameState:
 
         # TODO: implement determinization, and return GameState
         raise NotImplementedError
+
+
+def copy_list(original: list) -> list:
+    """Recursively copies n-dimensional list and returns the copy.
+
+    Slower than list slicing, faster than copy.deepcopy.
+    """
+    copied = []
+    for x in original:
+        if not isinstance(x, list):
+            copied.append(x)
+        else:
+            copied.append(copy_list(x))
+    return copied
