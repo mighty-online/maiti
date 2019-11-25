@@ -66,6 +66,9 @@ class Inferences:
 
         self.inferences[self.perspective.player][0] += Inference(self.perspective.player, True,
                                                                  CardSet(', '.join(self.perspective.hand)))
+        self.inferences[self.perspective.player][1] += Inference(self.perspective.player, False,
+                                                                 CardSet(', '.join(self.perspective.hand),
+                                                                         complement=True))
 
         # The loop below creates inferences from the previous gameplay
         for trick_num in range(len(perspective.tricks)):
@@ -116,7 +119,7 @@ class Inference:
 class CardSet:
     """A class to represent a set of cards."""
 
-    def __init__(self, info_string=None):
+    def __init__(self, info_string=None, complement=False):
         self.cards = set()
 
         if info_string is not None:
@@ -134,6 +137,14 @@ class CardSet:
                 cards = set(cards)
                 assert all(c in game.cards for c in cards)
                 self.cards = cards
+
+        # If complement, complements the set.
+        if complement:
+            comp_set = set()
+            for card in game.cards:
+                if card not in self.cards:
+                    comp_set.add(card)
+            self.cards = comp_set
 
     def includes(self, card):
         """Returns whether card is in CardSet"""
