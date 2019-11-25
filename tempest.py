@@ -58,7 +58,36 @@ class GameState:
 
 # This should be all the inferences for all the players grouped adequately
 class Inferences:
-    pass
+    """Contains the inferences for all 5 players for a given perspective."""
+
+    def __init__(self, perspective: game.Perspective):
+        self.perspective = perspective
+        self.inferences = [[Inference(p, True, CardSet()), Inference(p, False, CardSet())] for p in range(5)]
+
+        self.inferences[self.perspective.player][0] += Inference(self.perspective.player, True,
+                                                                 CardSet(', '.join(self.perspective.hand)))
+
+        # The loop below creates inferences from the previous gameplay
+        for trick_num in range(len(perspective.tricks)):
+            trick = perspective.tricks[trick_num]
+
+            # The block below adequately finds the suit_led for the trick
+            if trick_num < len(perspective.previous_suit_leds):
+                suit_led = perspective.previous_suit_leds[trick_num]
+            else:
+                suit_led = perspective.suit_led
+
+            for play in trick:
+                player, card = play
+                if card[0] in game.suits and card[0] != suit_led:
+                    self.inferences[player][1] += Inference(player, False, CardSet(suit_led))
+
+    def __repr__(self):
+        r_str = []
+        for player_infs in self.inferences:
+            for inf in player_infs:
+                r_str.append(repr(inf))
+        return '\n'.join(r_str)
 
 
 class Inference:
@@ -79,6 +108,10 @@ class Inference:
         self.cardset = self.cardset + other.cardset
         return self
 
+    def __repr__(self):
+        return "Inference: Player {} {} {}".format(self.player, "has" if self.has else "doesn't have",
+                                                   self.cardset.cards)
+
 
 class CardSet:
     """A class to represent a set of cards."""
@@ -92,16 +125,18 @@ class CardSet:
                 self.cards.add(info_string)
             # If a suit is specified
             elif info_string in game.suits:
-                self.cards += set([c for c in game.cards if c[0] == info_string])
+                self.cards = set([c for c in game.cards if c[0] == info_string])
             # If a rank is specified
             elif info_string in game.ranks:
-                self.cards += [c for c in game.cards if c[1] == info_string]
+                self.cards = set([c for c in game.cards if c[1] == info_string])
             else:
                 cards = info_string.split(', ')  # Mind the whitespace
+                cards = set(cards)
                 assert all(c in game.cards for c in cards)
-                self.cards += cards
+                self.cards = cards
 
     def includes(self, card):
+        """Returns whether card is in CardSet"""
         return card in self.cards
 
     def __add__(self, other):
@@ -113,7 +148,7 @@ class CardSet:
         return 'CardSet object: {' + ', '.join(self.cards) + '}'
 
 
-def determinize(perspective: list, biased=False) -> GameState:
+def determinize(perspective: game.Perspective, biased=False) -> GameState:
     """Determinize the given perspective into a deterministic state.
 
     If the 'biased' argument is set to False, determinization will be completely random.
@@ -122,9 +157,6 @@ def determinize(perspective: list, biased=False) -> GameState:
     if biased:
         raise NotImplementedError
     else:
-        player, player_hand, tricks, previous_suit_leds, suit_led, setup = perspective
-        declarer, trump, bid, friend_card, friend = setup
-
         # TODO: implement determinization, and return GameState
         raise NotImplementedError
 
