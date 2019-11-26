@@ -25,11 +25,12 @@ class GameState:
 
     This class is not meant to cover the early stages of the game before the tricks."""
 
-    # If 'point_cards' is left as None, it will automatically be constructed.
-    # If 'inferences' is left as None, it will automatically be constructed.
-    def __init__(self, hands, tricks, previous_suit_leds, suit_led, setup, kitty, point_cards=None, inferences=None):
+    # If point_cards is left as None, it will automatically be constructed based on completed_tricks.
+    def __init__(self, hands, completed_tricks, current_trick, previous_suit_leds, suit_led, setup, kitty,
+                 point_cards=None):
         self.hands = hands
-        self.tricks = tricks
+        self.completed_tricks = completed_tricks
+        self.current_trick = current_trick
         self.previous_suit_leds = previous_suit_leds
         self.suit_led = suit_led
 
@@ -41,20 +42,24 @@ class GameState:
         # Constructing 'point_cards' from the information given
         if point_cards is None:
             point_cards = [[] for _ in range(5)]
-            for trick_number in range(len(self.tricks)):
-                trick = self.tricks[trick_number]
-                if len(trick) == 5:  # i.e. a completed trick
-                    trick_winner = game.trick_winner(trick_number, trick, self.trump)
-                    point_cards = [c for c in [play[1] for play in trick] if game.is_pointcard(c)]
-                    point_cards[trick_winner] += point_cards
+            for trick_number in range(len(self.completed_tricks)):
+                trick = self.completed_tricks[trick_number]
+                trick_winner = game.trick_winner(trick_number, trick, self.trump)
+                point_cards = [c for c in [play[1] for play in trick] if game.is_pointcard(c)]
+                point_cards[trick_winner] += point_cards
 
+        # The player to move is set automatically
         self.point_cards = point_cards
+        if self.current_trick:
+            previous_player = self.current_trick[-1][0]
+        else:
+            previous_player = self.completed_tricks[-1][-1][0]
 
-        # TODO: construct inferences from info, and assign
+        self.player_to_move = game.next_player(previous_player)
 
-        self.inferences = inferences
-
-        raise NotImplementedError
+    def legal_moves(self):
+        return game.legal_moves(len(self.completed_tricks), self.current_trick, self.suit_led, self.trump,
+                                self.hands[self.player_to_move])
 
 
 # This should be all the inferences for all the players grouped adequately
@@ -72,8 +77,9 @@ class Inferences:
                                                                          complement=True))
 
         # The loop below creates inferences from the previous gameplay
-        for trick_num in range(len(perspective.tricks)):
-            trick = perspective.tricks[trick_num]
+        tricks = perspective.completed_tricks + [perspective.current_trick]
+        for trick_num in range(len(tricks)):
+            trick = tricks[trick_num]
 
             # The block below adequately finds the suit_led for the trick
             if trick_num < len(perspective.previous_suit_leds):
@@ -264,3 +270,17 @@ def copy_list(original: list) -> list:
         else:
             copied.append(copy_list(x))
     return copied
+
+
+def ismcts(perspective: game.Perspective, itermax: int, verbose=False, biased=False):
+    """Performs an ISMCTS search from the given perspective and returns the best move after itermax iterations."""
+
+    root_node = InfoSet()
+    for i in range(itermax):
+        node_head = root_node
+
+        # Determinization
+        determinized_state = determinize(perspective, biased)
+
+        # Selection
+        #while determinized_state.legal_moves()
