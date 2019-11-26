@@ -7,6 +7,7 @@ Development started 2019/06/15
 """
 
 from game_logic import game
+from math import sqrt, log
 from random import shuffle
 
 __author__ = "Jake Hyun (SyphonArch)"
@@ -122,7 +123,7 @@ class CardSet:
     def __init__(self, info_string=None, complement=False):
         self.cards = set()
 
-        if info_string is not None:
+        if info_string is not None and info_string != '':
             # If a single card is specified
             if info_string in game.cards:
                 self.cards.add(info_string)
@@ -135,7 +136,11 @@ class CardSet:
             else:
                 cards = info_string.split(', ')  # Mind the whitespace
                 cards = set(cards)
-                assert all(c in game.cards for c in cards)
+                try:
+                    assert all(c in game.cards for c in cards)
+                except AssertionError:
+                    raise AssertionError("Invalid card in {}".format(cards))
+
                 self.cards = cards
 
         # If complement, complements the set.
@@ -157,6 +162,81 @@ class CardSet:
 
     def __repr__(self):
         return 'CardSet object: {' + ', '.join(self.cards) + '}'
+
+
+class InfoSet:
+    """The Information Set class, used as the nodes in the ISMCTS game tree."""
+
+    def __init__(self, parent=None, player=None, move=None):
+        self.parent = parent
+        self.player = player
+        self.move = move
+        self.children = []
+        self._move_to_children = {}  # dictionary to map moves to children
+
+        self.reward_sum = 0
+        self.visits = 0
+        self.avails = 1
+
+        self._tried_moves = set()
+
+    def untried_moves(self, legal_moves):
+        """Returns the elements of legal_moves for which this node has no children."""
+        return [move for move in legal_moves if move not in self._tried_moves]
+
+    def ucb_child_select(self, legal_moves, exploration=0.7):
+        """Uses the UCB1 formula to select a child node, filtered by the legal_moves."""
+        legal_children = [self._move_to_children[move] for move in legal_moves]
+
+        # Select child with highest UCB score
+        selected = max(legal_children,
+                       key=lambda c: c.reward_sum / c.visits + exploration * sqrt(log(c.avails) / c.visits))
+
+        # Update availability counts
+        for child in legal_children:
+            child.avails += 1
+
+        return selected
+
+    def add_child(self, player: int, move: str):
+        """Add child to node and return child."""
+        child = InfoSet(self, player, move)
+
+        self.children.append(child)
+        self._move_to_children[move] = child
+        self._tried_moves.add(move)
+
+        return child
+
+    def update(self, rewards: list):
+        """Update this node's reward_sum and visit count based on the rewards of a rollout."""
+        self.visits += 1
+        if self.player is not None:
+            self.reward_sum += rewards[self.player]
+
+    def __repr__(self):
+        return "[Move:{} R/V/A: {}/{}/{}]".format(self.move, self.reward_sum, self.visits, self.avails)
+
+    def _tree_info(self):
+        """Data for tree_info."""
+        depths = [[]]
+        depths[0].append(len(self.children))
+        for child in self.children:
+            child_d = child._tree_info()
+            for i in range(len(child_d)):
+                while i + 1 >= len(depths):
+                    depths.append([])
+                depths[i + 1] += child_d[i]
+        return depths
+
+    def tree_info(self):
+        """Visualize the tree structure and size."""
+        visual_str = []
+        depths = self._tree_info()
+        for depth in depths:
+            visual_str.append(' '.join([str(x) for x in depth]))
+
+        print('\n'.join(visual_str))
 
 
 def determinize(perspective: game.Perspective, biased=False) -> GameState:
