@@ -6,60 +6,59 @@ This module has been written in mind of being called from tranquil.py, the front
 Development started 2019/06/15
 """
 
-from game_logic import game
+from game_logic import engine, cards, constructs
 from math import sqrt, log
-from random import shuffle
-
-__author__ = "Jake Hyun (SyphonArch)"
-__copyright__ = "Copyright 2019, The Mighty-Online Team"
-__credits__ = ["Jake Hyun (SyphonArch)"]
-__license__ = "MIT"
-__version__ = "0.1.0"
-__maintainer__ = "Jake Hyun (SyphonArch)"
-__email__ = "jake.hyun@hotmail.com"
-__status__ = "Development"
 
 
-class GameState:
+class GameState(engine.GameEngine):
     """The class for a state of the Mighty game, in its 'play' stage.
 
     This class is not meant to cover the early stages of the game before the tricks."""
 
-    # If point_cards is left as None, it will automatically be constructed based on completed_tricks.
-    def __init__(self, hands, completed_tricks, current_trick, previous_suit_leds, suit_led, setup, kitty,
-                 point_cards=None):
+    def __init__(self, hands, kitty, point_cards, completed_tricks, trick_winners, current_trick, previous_suit_leds,
+                 suit_led, setup: constructs.Setup):
+        super().__init__()
+
         self.hands = hands
+        self.kitty = kitty
+        self.point_cards = point_cards
+
+        # Play related variables
         self.completed_tricks = completed_tricks
+        self.trick_winners = trick_winners
         self.current_trick = current_trick
         self.previous_suit_leds = previous_suit_leds
         self.suit_led = suit_led
 
-        self.setup = setup
-        self.declarer, self.trump, self.bid, self.friend_card, self.friend = self.setup  # unpacking setup
+        # Unpacking setup
+        self.declarer = setup.declarer
+        self.trump = setup.trump
+        self.bid = setup.bid
+        self.friend = setup.friend
+        self.friend_card = setup.friend_card
 
-        self.kitty = kitty
+        # Mighty and Ripper cards
+        self.mighty = constructs.trump_to_mighty(self.trump)
+        self.ripper = constructs.trump_to_ripper(self.trump)
 
-        # Constructing 'point_cards' from the information given
-        if point_cards is None:
-            point_cards = [[] for _ in range(5)]
-            for trick_number in range(len(self.completed_tricks)):
-                trick = self.completed_tricks[trick_number]
-                trick_winner = game.trick_winner(trick_number, trick, self.trump)
-                point_cards = [c for c in [play[1] for play in trick] if game.is_pointcard(c)]
-                point_cards[trick_winner] += point_cards
-
-        # The player to move is set automatically
-        self.point_cards = point_cards
-        if self.current_trick:
-            previous_player = self.current_trick[-1][0]
+        if len(self.completed_tricks) < 10:
+            self.next_call = engine.CallType('play')
         else:
-            previous_player = self.completed_tricks[-1][-1][0]
+            self.next_call = engine.CallType('game over')
 
-        self.player_to_move = game.next_player(previous_player)
+        if len(self.completed_tricks) == 0:
+            self.leader = self.declarer
+        else:
+            self.leader = self.trick_winners[-1]
 
-    def legal_moves(self):
-        return game.legal_moves(len(self.completed_tricks), self.current_trick, self.suit_led, self.trump,
-                                self.hands[self.player_to_move])
+    def next_player(self):
+        if len(self.current_trick) == 0:
+            return self.leader
+        else:
+            return constructs.next_player(self.current_trick[-1].player)
+
+    def legal_plays(self):
+        return constructs.legal_plays(self.perspective(self.next_player()))
 
 
 # This should be all the inferences for all the players grouped adequately
@@ -71,9 +70,9 @@ class Inferences:
         self.inferences = [[Inference(p, True, CardSet()), Inference(p, False, CardSet())] for p in range(5)]
 
         self.inferences[self.perspective.player][0] += Inference(self.perspective.player, True,
-                                                                 CardSet(', '.join(self.perspective.hand)))
+                                                                 CardSet(', '.join(map(str, self.perspective.hand))))
         self.inferences[self.perspective.player][1] += Inference(self.perspective.player, False,
-                                                                 CardSet(', '.join(self.perspective.hand),
+                                                                 CardSet(', '.join(map(str, self.perspective.hand)),
                                                                          complement=True))
 
         # The loop below creates inferences from the previous gameplay
@@ -283,4 +282,4 @@ def ismcts(perspective: game.Perspective, itermax: int, verbose=False, biased=Fa
         determinized_state = determinize(perspective, biased)
 
         # Selection
-        #while determinized_state.legal_moves()
+        # while determinized_state.legal_moves()
