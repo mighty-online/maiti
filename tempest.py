@@ -6,7 +6,9 @@ This module has been written in mind of being called from tranquil.py, the front
 Development started 2019/06/15
 """
 
-from game_logic import engine, cards, constructs
+from game_logic import engine
+from game_logic import constructs as cs
+from game_logic.cards import Card, Suit, Rank
 from math import sqrt, log
 
 
@@ -16,7 +18,7 @@ class GameState(engine.GameEngine):
     This class is not meant to cover the early stages of the game before the tricks."""
 
     def __init__(self, hands, kitty, point_cards, completed_tricks, trick_winners, current_trick, previous_suit_leds,
-                 suit_led, setup: constructs.Setup):
+                 suit_led, setup: cs.Setup):
         super().__init__()
 
         self.hands = hands
@@ -35,11 +37,11 @@ class GameState(engine.GameEngine):
         self.trump = setup.trump
         self.bid = setup.bid
         self.friend = setup.friend
-        self.friend_card = setup.friend_card
+        self.friend_call = setup.friend_call
 
         # Mighty and Ripper cards
-        self.mighty = constructs.trump_to_mighty(self.trump)
-        self.ripper = constructs.trump_to_ripper(self.trump)
+        self.mighty = setup.mighty
+        self.ripper = setup.ripper
 
         if len(self.completed_tricks) < 10:
             self.next_call = engine.CallType('play')
@@ -55,17 +57,17 @@ class GameState(engine.GameEngine):
         if len(self.current_trick) == 0:
             return self.leader
         else:
-            return constructs.next_player(self.current_trick[-1].player)
+            return cs.next_player(self.current_trick[-1].player)
 
     def legal_plays(self):
-        return constructs.legal_plays(self.perspective(self.next_player()))
+        return cs.legal_plays(self.perspective(self.next_player()))
 
 
 # This should be all the inferences for all the players grouped adequately
 class Inferences:
     """Contains the inferences for all 5 players for a given perspective."""
 
-    def __init__(self, perspective: game.Perspective):
+    def __init__(self, perspective: cs.Perspective):
         self.perspective = perspective
         self.inferences = [[Inference(p, True, CardSet()), Inference(p, False, CardSet())] for p in range(5)]
 
@@ -87,8 +89,8 @@ class Inferences:
                 suit_led = perspective.suit_led
 
             for play in trick:
-                player, card = play
-                if card[0] in game.suits and card[0] != suit_led:
+                player, card = play.player, play.card
+                if not card.suit.is_nosuit() and card != perspective.setup.mighty and card.suit != suit_led:
                     self.inferences[player][1] += Inference(player, False, CardSet(suit_led))
 
     def __repr__(self):
@@ -124,49 +126,41 @@ class Inference:
 
 class CardSet:
     """A class to represent a set of cards."""
-
     def __init__(self, info_string=None, complement=False):
-        self.cards = set()
-
+        self.cards_set = set()
         if info_string is not None and info_string != '':
             # If a single card is specified
-            if info_string in game.cards:
-                self.cards.add(info_string)
+            if Card.is_cardstr(info_string):
+                self.cards_set.add(Card.str_to_card(info_string))
             # If a suit is specified
-            elif info_string in game.suits:
-                self.cards = set([c for c in game.cards if c[0] == info_string])
+            elif Suit.is_suitstr(info_string):
+                self.cards_set = set(Card.suit_iter(Suit.str_to_suit(info_string)))
             # If a rank is specified
-            elif info_string in game.ranks:
-                self.cards = set([c for c in game.cards if c[1] == info_string])
+            elif Rank.is_rankstr(info_string):
+                self.cards_set = set(Card.rank_iter(Rank.str_to_rank(info_string)))
             else:
-                cards = info_string.split(', ')  # Mind the whitespace
-                cards = set(cards)
-                try:
-                    assert all(c in game.cards for c in cards)
-                except AssertionError:
-                    raise AssertionError("Invalid card in {}".format(cards))
-
-                self.cards = cards
+                card_strings = info_string.split(', ')  # Mind the whitespace
+                self.cards_set = set([Card.str_to_card(card_string) for card_string in card_strings])
 
         # If complement, complements the set.
         if complement:
             comp_set = set()
-            for card in game.cards:
-                if card not in self.cards:
+            for card in Card.iter():
+                if card not in self.cards_set:
                     comp_set.add(card)
-            self.cards = comp_set
+            self.cards_set = comp_set
 
     def includes(self, card):
         """Returns whether card is in CardSet"""
-        return card in self.cards
+        return card in self.cards_set
 
     def __add__(self, other):
         new_set = CardSet()
-        new_set.cards = self.cards.union(other.cards)
+        new_set.cards_set = self.cards_set.union(other.cards)
         return new_set
 
     def __repr__(self):
-        return 'CardSet object: {' + ', '.join(self.cards) + '}'
+        return 'CardSet object: {' + ', '.join(self.cards_set) + '}'
 
 
 class InfoSet:
@@ -222,12 +216,15 @@ class InfoSet:
     def __repr__(self):
         return "[Move:{} R/V/A: {}/{}/{}]".format(self.move, self.reward_sum, self.visits, self.avails)
 
-    def _tree_info(self):
-        """Data for tree_info."""
+    def raw_tree_info(self):
+        """Data for tree_info.
+
+        For public use outside of class, use tree_info instead.
+        """
         depths = [[]]
         depths[0].append(len(self.children))
         for child in self.children:
-            child_d = child._tree_info()
+            child_d = child.raw_tree_info()
             for i in range(len(child_d)):
                 while i + 1 >= len(depths):
                     depths.append([])
@@ -237,14 +234,14 @@ class InfoSet:
     def tree_info(self):
         """Visualize the tree structure and size."""
         visual_str = []
-        depths = self._tree_info()
+        depths = self.raw_tree_info()
         for depth in depths:
             visual_str.append(' '.join([str(x) for x in depth]))
 
         print('\n'.join(visual_str))
 
 
-def determinize(perspective: game.Perspective, biased=False) -> GameState:
+def determinize(perspective: cs.Perspective, biased=False) -> GameState:
     """Determinize the given perspective into a deterministic state.
 
     If the 'biased' argument is set to False, determinization will be completely random.
@@ -271,7 +268,7 @@ def copy_list(original: list) -> list:
     return copied
 
 
-def ismcts(perspective: game.Perspective, itermax: int, verbose=False, biased=False):
+def ismcts(perspective: cs.Perspective, itermax: int, verbose=False, biased=False):
     """Performs an ISMCTS search from the given perspective and returns the best move after itermax iterations."""
 
     root_node = InfoSet()
