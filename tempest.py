@@ -10,6 +10,7 @@ from game_logic import engine
 from game_logic import constructs as cs
 from game_logic.cards import Card, Suit, Rank
 from math import sqrt, log
+import random
 
 
 class GameState(engine.GameEngine):
@@ -18,7 +19,7 @@ class GameState(engine.GameEngine):
     This class is not meant to cover the early stages of the game before the tricks."""
 
     def __init__(self, hands, kitty, point_cards, completed_tricks, trick_winners, current_trick, previous_suit_leds,
-                 suit_led, setup: cs.Setup):
+                 suit_led, declarer, trump, bid, friend, called_friend, friend_just_revealed):
         super().__init__()
 
         self.hands = hands
@@ -32,16 +33,17 @@ class GameState(engine.GameEngine):
         self.previous_suit_leds = previous_suit_leds
         self.suit_led = suit_led
 
-        # Unpacking setup
-        self.declarer = setup.declarer
-        self.trump = setup.trump
-        self.bid = setup.bid
-        self.friend = setup.friend
-        self.friend_call = setup.friend_call
+        self.declarer = declarer
+        self.trump = trump
+        self.bid = bid
+        self.friend = friend
+        self.called_friend = called_friend
+
+        self.friend_just_revealed = friend_just_revealed
 
         # Mighty and Ripper cards
-        self.mighty = setup.mighty
-        self.ripper = setup.ripper
+        self.mighty = cs.trump_to_mighty(trump)
+        self.ripper = cs.trump_to_ripper(trump)
 
         if len(self.completed_tricks) < 10:
             self.next_call = engine.CallType('play')
@@ -67,8 +69,8 @@ class GameState(engine.GameEngine):
 class Inferences:
     """Contains the inferences for all 5 players for a given perspective."""
 
-    def __init__(self, perspective: cs.Perspective):
-        self.perspective = perspective
+    def __init__(self, pers: cs.Perspective):
+        self.perspective = pers
         self.inferences = [[Inference(p, True, CardSet()), Inference(p, False, CardSet())] for p in range(5)]
 
         self.inferences[self.perspective.player][0] += Inference(self.perspective.player, True,
@@ -78,19 +80,19 @@ class Inferences:
                                                                          complement=True))
 
         # The loop below creates inferences from the previous gameplay
-        tricks = perspective.completed_tricks + [perspective.current_trick]
+        tricks = pers.completed_tricks + [pers.current_trick]
         for trick_num in range(len(tricks)):
             trick = tricks[trick_num]
 
             # The block below adequately finds the suit_led for the trick
-            if trick_num < len(perspective.previous_suit_leds):
-                suit_led = perspective.previous_suit_leds[trick_num]
+            if trick_num < len(pers.previous_suit_leds):
+                suit_led = pers.previous_suit_leds[trick_num]
             else:
-                suit_led = perspective.suit_led
+                suit_led = pers.suit_led
 
             for play in trick:
                 player, card = play.player, play.card
-                if not card.suit.is_nosuit() and card != perspective.setup.mighty and card.suit != suit_led:
+                if not card.suit.is_nosuit() and card != pers.mighty and card.suit != suit_led:
                     self.inferences[player][1] += Inference(player, False, CardSet(suit_led))
 
     def __repr__(self):
@@ -102,9 +104,10 @@ class Inferences:
 
 
 class Inference:
+    """An inference for a player."""
     def __init__(self, player, has: bool, cardset):
         self.player = player
-        self.has = has
+        self.has = has  # When True, player has cardset. When false, player does not have cardset.
         self.cardset = cardset
 
     def __add__(self, other):
@@ -166,26 +169,25 @@ class CardSet:
 class InfoSet:
     """The Information Set class, used as the nodes in the ISMCTS game tree."""
 
-    def __init__(self, parent=None, player=None, move=None):
+    def __init__(self, parent=None, arriving_play=None):
         self.parent = parent
-        self.player = player
-        self.move = move
+        self.arriving_play = arriving_play
         self.children = []
-        self._move_to_children = {}  # dictionary to map moves to children
+        self._play_to_children = {}  # dictionary to map moves to children
 
         self.reward_sum = 0
         self.visits = 0
         self.avails = 1
 
-        self._tried_moves = set()
+        self._tried_plays = set()
 
-    def untried_moves(self, legal_moves):
+    def untried_plays(self, legal_plays):
         """Returns the elements of legal_moves for which this node has no children."""
-        return [move for move in legal_moves if move not in self._tried_moves]
+        return [play for play in legal_plays if play not in self._tried_plays]
 
-    def ucb_child_select(self, legal_moves, exploration=0.7):
+    def ucb_child_select(self, legal_plays, exploration=0.7):
         """Uses the UCB1 formula to select a child node, filtered by the legal_moves."""
-        legal_children = [self._move_to_children[move] for move in legal_moves]
+        legal_children = [self._play_to_children[play] for play in legal_plays]
 
         # Select child with highest UCB score
         selected = max(legal_children,
@@ -197,24 +199,24 @@ class InfoSet:
 
         return selected
 
-    def add_child(self, player: int, move: str):
+    def add_child(self, play: cs.Play):
         """Add child to node and return child."""
-        child = InfoSet(self, player, move)
+        child = InfoSet(self, play)
 
         self.children.append(child)
-        self._move_to_children[move] = child
-        self._tried_moves.add(move)
+        self._play_to_children[play] = child
+        self._tried_plays.add(play)
 
         return child
 
     def update(self, rewards: list):
         """Update this node's reward_sum and visit count based on the rewards of a rollout."""
         self.visits += 1
-        if self.player is not None:
-            self.reward_sum += rewards[self.player]
+        if self.arriving_play is not None:
+            self.reward_sum += rewards[self.arriving_play.player]
 
     def __repr__(self):
-        return "[Move:{} R/V/A: {}/{}/{}]".format(self.move, self.reward_sum, self.visits, self.avails)
+        return "[Play:{} R/V/A: {}/{}/{}]".format(self.arriving_play, self.reward_sum, self.visits, self.avails)
 
     def raw_tree_info(self):
         """Data for tree_info.
@@ -250,7 +252,6 @@ def determinize(perspective: cs.Perspective, biased=False) -> GameState:
     if biased:
         raise NotImplementedError
     else:
-        # TODO: implement determinization, and return GameState
         raise NotImplementedError
 
 
@@ -268,7 +269,7 @@ def copy_list(original: list) -> list:
     return copied
 
 
-def ismcts(perspective: cs.Perspective, itermax: int, verbose=False, biased=False):
+def ismcts(perspective: cs.Perspective, itermax: int, verbose=False, biased=False) -> cs.Play:
     """Performs an ISMCTS search from the given perspective and returns the best move after itermax iterations."""
 
     root_node = InfoSet()
@@ -279,4 +280,33 @@ def ismcts(perspective: cs.Perspective, itermax: int, verbose=False, biased=Fals
         determinized_state = determinize(perspective, biased)
 
         # Selection
-        # while determinized_state.legal_moves()
+        legal_plays = determinized_state.legal_plays()
+        while legal_plays and len(node_head.untried_plays(legal_plays)) == 0:
+            # this node is fully expanded and non-terminal
+            node_head = node_head.ucb_child_select(legal_plays)
+            determinized_state.play(node_head.play)
+            legal_plays = determinized_state.legal_plays()
+
+        # Expansion
+        untried_plays = node_head.untried_plays(legal_plays)
+        if untried_plays:  # if we can expand (i.e. state/node is non-terminal)
+            chosen_play = random.choice(untried_plays)
+            determinized_state.play(chosen_play)
+            node_head = node_head.add_child(chosen_play)  # add child and descend tree
+
+        # Simulation
+        while determinized_state.next_call == engine.CallType.PLAY:
+            legal_plays = determinized_state.legal_plays()
+            determinized_state.play(random.choice(legal_plays))
+
+        # Backpropagation
+        while node_head is not None:
+            node_head.update(determinized_state.gamepoints_rewarded)
+
+    if verbose:
+        print(root_node.tree_info())
+
+    return max(root_node.children, key=lambda child: child.visits).play
+
+
+
