@@ -95,6 +95,10 @@ class Inferences:
                 if not card.suit.is_nosuit() and card != pers.mighty and card.suit != suit_led:
                     self.inferences[player][1] += Inference(player, False, CardSet(suit_led))
 
+    def player_inference(self, player):
+        """Returns the inferences for a certain player."""
+        return self.inferences[player]
+
     def __repr__(self):
         r_str = []
         for player_infs in self.inferences:
