@@ -120,7 +120,7 @@ ai_player = tempest.ismcts
 
 while True:
     ai_num = '5'
-    ai_num = input("How many AI agents?: ")
+    # ai_num = input("How many AI agents?: ")
     print()
     if ai_num.isdigit() and int(ai_num) in range(6):
         ai_num = int(ai_num)
@@ -364,7 +364,7 @@ while True:
                 input()
             print('-------------------------------')
             print()
-            print("===Trick Summary===")
+            print(" === Trick Summary === ")
             for play in mighty_game.completed_tricks[-1]:
                 print(play)
             print()

@@ -94,7 +94,7 @@ class Inferences:
 
             for play in trick:
                 player, card = play.player, play.card
-                if not card.suit.is_nosuit() and card != pers.mighty and card.suit != suit_led:
+                if not card.suit.is_nosuit() and card != pers.mighty and not card.is_joker() and card.suit != suit_led:
                     self.inferences[player][1] += Inference(player, False, CardSet(suit_led))
 
     def player_inference(self, player):
@@ -248,7 +248,7 @@ class InfoSet:
         for depth in depths:
             visual_str.append(' '.join([str(x) for x in depth]))
 
-        print('\n'.join(visual_str))
+        return '\n'.join(visual_str)
 
 
 def determinize(perspective: cs.Perspective, mode=0) -> GameState:
@@ -315,7 +315,7 @@ def copy_list(original: list) -> list:
     return copied
 
 
-def ismcts(perspective: cs.Perspective, itermax: int = 100, verbose=False, biased=False) -> cs.Play:
+def ismcts(perspective: cs.Perspective, itermax: int = 100, verbose=True, biased=False) -> cs.Play:
     """Performs an ISMCTS search from the given perspective and returns the best move after itermax iterations."""
 
     root_node = InfoSet()
