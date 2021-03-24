@@ -10,6 +10,7 @@ from game_logic import engine
 from game_logic import constructs as cs
 from game_logic.cards import Card, Suit, Rank
 from math import sqrt, log
+from copy import deepcopy
 import random
 
 
@@ -46,23 +47,24 @@ class GameState(engine.GameEngine):
         self.ripper = cs.trump_to_ripper(trump)
 
         if len(self.completed_tricks) < 10:
-            self.next_call = engine.CallType('play')
+            self.next_calltype = cs.CallType.PLAY
         else:
-            self.next_call = engine.CallType('game over')
+            self.next_calltype = cs.CallType.GAME_OVER
 
         if len(self.completed_tricks) == 0:
             self.leader = self.declarer
         else:
             self.leader = self.trick_winners[-1]
 
-    def next_player(self):
-        if len(self.current_trick) == 0:
-            return self.leader
-        else:
-            return cs.next_player(self.current_trick[-1].player)
-
-    def legal_plays(self):
-        return cs.legal_plays(self.perspective(self.next_player()))
+    @classmethod
+    def from_perspective(cls, perspective, hands, kitty):
+        pers_copy = deepcopy(perspective)
+        hands_copy = deepcopy(hands)
+        kitty_copy = deepcopy(kitty)
+        return cls(hands_copy, kitty_copy, pers_copy.point_cards, pers_copy.completed_tricks,
+                   pers_copy.trick_winners, pers_copy.current_trick, pers_copy.previous_suit_leds,
+                   pers_copy.suit_led, pers_copy.declarer, pers_copy.trump, pers_copy.bid,
+                   pers_copy.friend, pers_copy.called_friend, pers_copy.friend_just_revealed)
 
 
 # This should be all the inferences for all the players grouped adequately
@@ -109,6 +111,7 @@ class Inferences:
 
 class Inference:
     """An inference for a player."""
+
     def __init__(self, player, has: bool, cardset):
         self.player = player
         self.has = has  # When True, player has cardset. When false, player does not have cardset.
@@ -133,6 +136,7 @@ class Inference:
 
 class CardSet:
     """A class to represent a set of cards."""
+
     def __init__(self, info_string=None, complement=False):
         self.cards_set = set()
         if info_string is not None and info_string != '':
@@ -247,14 +251,52 @@ class InfoSet:
         print('\n'.join(visual_str))
 
 
-def determinize(perspective: cs.Perspective, biased=False) -> GameState:
+def determinize(perspective: cs.Perspective, mode=0) -> GameState:
     """Determinize the given perspective into a deterministic state.
 
-    If the 'biased' argument is set to False, determinization will be completely random.
-    Else, if the 'biased' argument is set to True, determinization will be biased adequately.
+    The mode parameter determines the way in which determinization happens.
     """
-    if biased:
-        raise NotImplementedError
+    if mode == 0:
+        is_declarer = perspective.player == perspective.declarer
+
+        played_cards = set()
+        for trick in perspective.completed_tricks:
+            for play in trick:
+                played_cards.add(play.card)
+        for play in perspective.current_trick:
+            played_cards.add(play.card)
+        for card in perspective.hand:
+            played_cards.add(card)
+        if is_declarer:
+            for card in perspective.kitty:
+                played_cards.add(card)
+
+        unplayed_cards = []
+        for card in Card.iter():
+            if card not in played_cards:
+                unplayed_cards.append(card)
+        random.shuffle(unplayed_cards)
+        determinized_hands = [[] for _ in range(5)]
+
+        if not is_declarer:
+            assert len(unplayed_cards) == sum(perspective.hand_sizes) - len(perspective.hand) + 3
+        else:
+            assert len(unplayed_cards) == sum(perspective.hand_sizes) - len(perspective.hand)
+
+        for player in range(5):
+            if player != perspective.player:
+                hand_size = perspective.hand_sizes[player]
+                for _ in range(hand_size):
+                    determinized_hands[player].append(unplayed_cards.pop())
+        determinized_hands[perspective.player] = perspective.hand
+
+        if not is_declarer:
+            determinized_kitty = unplayed_cards
+        else:
+            determinized_kitty = perspective.kitty
+
+        determinized_state = GameState.from_perspective(perspective, determinized_hands, determinized_kitty)
+        return determinized_state
     else:
         raise NotImplementedError
 
@@ -273,7 +315,7 @@ def copy_list(original: list) -> list:
     return copied
 
 
-def ismcts(perspective: cs.Perspective, itermax: int, verbose=False, biased=False) -> cs.Play:
+def ismcts(perspective: cs.Perspective, itermax: int = 100, verbose=False, biased=False) -> cs.Play:
     """Performs an ISMCTS search from the given perspective and returns the best move after itermax iterations."""
 
     root_node = InfoSet()
@@ -284,12 +326,12 @@ def ismcts(perspective: cs.Perspective, itermax: int, verbose=False, biased=Fals
         determinized_state = determinize(perspective, biased)
 
         # Selection
-        legal_plays = determinized_state.legal_plays()
+        legal_plays = determinized_state.get_legal_plays(determinized_state.next_player)
         while legal_plays and len(node_head.untried_plays(legal_plays)) == 0:
             # this node is fully expanded and non-terminal
             node_head = node_head.ucb_child_select(legal_plays)
             determinized_state.play(node_head.play)
-            legal_plays = determinized_state.legal_plays()
+            legal_plays = determinized_state.get_legal_plays(determinized_state.next_player)
 
         # Expansion
         untried_plays = node_head.untried_plays(legal_plays)
@@ -299,18 +341,16 @@ def ismcts(perspective: cs.Perspective, itermax: int, verbose=False, biased=Fals
             node_head = node_head.add_child(chosen_play)  # add child and descend tree
 
         # Simulation
-        while determinized_state.next_call == engine.CallType.PLAY:
-            legal_plays = determinized_state.legal_plays()
+        while determinized_state.next_calltype == cs.CallType.PLAY:
+            legal_plays = determinized_state.get_legal_plays(determinized_state.next_player)
             determinized_state.play(random.choice(legal_plays))
 
         # Backpropagation
         while node_head is not None:
             node_head.update(determinized_state.gamepoints_rewarded)
+            node_head = node_head.parent
 
     if verbose:
         print(root_node.tree_info())
 
-    return max(root_node.children, key=lambda child: child.visits).play
-
-
-
+    return max(root_node.children, key=lambda child: child.visits).arriving_play
