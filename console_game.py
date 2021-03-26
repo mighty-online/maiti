@@ -312,7 +312,6 @@ while True:
         print("REDEAL IN PROCESS.")
         mighty_game = engine.GameEngine()
         print("REDEAL COMPLETE.")
-        print()
         introduce_hands(mighty_game.hands, human_players)
 
     elif call_type == cs.CallType.PLAY:
@@ -327,6 +326,7 @@ while True:
             print(play)
         print()
         print("Player {}'s turn to play.".format(player))
+        print(mighty_game.hands[player])
 
         perspective = mighty_game.get_perspective(player)
 
@@ -372,8 +372,8 @@ while True:
             print("Trick won by Player {}!".format(mighty_game.trick_winners[-1]))
 
             for p in range(5):
-                if p not in (mighty_game.declarer, mighty_game.friend):
-                    print('Player {}: {} points'.format(p, len(mighty_game.point_cards[p])))
+                # if p not in (mighty_game.declarer, mighty_game.friend):
+                print('Player {}: {} points'.format(p, len(mighty_game.point_cards[p])))
             print()
             print('-------------------------------')
 

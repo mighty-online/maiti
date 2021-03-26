@@ -5,6 +5,7 @@ This module has been written in mind of being called from tranquil.py, the front
 
 Development started 2019/06/15
 """
+from typing import List
 
 from game_logic import engine
 from game_logic import constructs as cs
@@ -12,6 +13,8 @@ from game_logic.cards import Card, Suit, Rank
 from math import sqrt, log
 from copy import deepcopy
 import random
+from functools import reduce
+import sys
 
 
 class GameState(engine.GameEngine):
@@ -226,29 +229,71 @@ class InfoSet:
     def __repr__(self):
         return "[Play:{} R/V/A: {}/{}/{}]".format(self.arriving_play, self.reward_sum, self.visits, self.avails)
 
-    def raw_tree_info(self):
-        """Data for tree_info.
-
-        For public use outside of class, use tree_info instead.
-        """
-        depths = [[]]
-        depths[0].append(len(self.children))
-        for child in self.children:
-            child_d = child.raw_tree_info()
-            for i in range(len(child_d)):
-                while i + 1 >= len(depths):
-                    depths.append([])
-                depths[i + 1] += child_d[i]
-        return depths
+    def tree_info_constructor(self):
+        if len(self.children) == 0:
+            return TreeInfoDataStructure([[self.visits]])
+        else:
+            tree_info = reduce(lambda x, y: x + y, (child.tree_info_constructor() for child in self.children))
+            tree_info.add_parent(self.visits)
+            return tree_info
 
     def tree_info(self):
-        """Visualize the tree structure and size."""
-        visual_str = []
-        depths = self.raw_tree_info()
-        for depth in depths:
-            visual_str.append(' '.join([str(x) for x in depth]))
+        header = ' ///// TREE INFO ///////////////////\n'
+        play_info_str = ' | '.join(repr(child.arriving_play) for child in self.children)
+        tree_info_str = str(self.tree_info_constructor())
+        footer = '\n ///////////////////////////////////'
+        return header + play_info_str + '\n' + tree_info_str + footer
 
-        return '\n'.join(visual_str)
+
+class TreeInfoDataStructure:
+    """Data structure representing a tree_info data."""
+
+    def __init__(self, layers: List[List[int]]):
+        """Note: empty nodes must be represented by -1"""
+        assert all(len(layer) == len(layers[0]) for layer in layers)
+        self.layers = layers
+
+    def depth(self):
+        return len(self.layers)
+
+    def width(self):
+        return len(self.layers[0])
+
+    def add_parent(self, parent_visits):
+        parent_layer = [parent_visits] + [-1] * (self.width() - 1)
+        self.layers = [parent_layer] + self.layers
+
+    def __add__(self, other):
+        """Adds together the layers, layer by layer."""
+        if not isinstance(other, TreeInfoDataStructure):
+            raise TypeError("TreeInfoDataStructure can only be added with another of its type")
+        layer_count = max(self.depth(), other.depth())
+        my_layers = self.layers + [[-1] * self.width() for _ in range(layer_count - self.depth())]
+        other_layers = other.layers + [[-1] * other.width() for _ in range(layer_count - other.depth())]
+        merged_layers = []
+        for i in range(layer_count):
+            merged_layers.append(my_layers[i] + other_layers[i])
+        return TreeInfoDataStructure(merged_layers)
+
+    def __str__(self):
+        def padding(width_location):
+            max_digits = 1
+            for layer in self.layers:
+                value = layer[width_location]
+                if value >= 0:
+                    max_digits = max(max_digits, len(str(value)))
+            return max_digits
+
+        layer_strings = []
+        for layer in self.layers:
+            layer_string_builder = []
+            for i, value in enumerate(layer):
+                if value >= 0:
+                    layer_string_builder.append(f"{value:<{padding(i)}}")
+                else:
+                    layer_string_builder.append(' ' * padding(i))
+            layer_strings.append(' '.join(layer_string_builder))
+        return '\n'.join(layer_strings)
 
 
 def determinize(perspective: cs.Perspective, mode=0) -> GameState:
@@ -325,13 +370,19 @@ def ismcts(perspective: cs.Perspective, itermax: int = 100, verbose=True, biased
         # Determinization
         determinized_state = determinize(perspective, biased)
 
+        # Checking if there's only a single available move
+        legal_plays = determinized_state.get_legal_plays()
+        if len(legal_plays) == 1:
+            if verbose:
+                print("Single move found - skipping ISMCTS")
+            return legal_plays[0]
+
         # Selection
-        legal_plays = determinized_state.get_legal_plays(determinized_state.next_player)
         while legal_plays and len(node_head.untried_plays(legal_plays)) == 0:
             # this node is fully expanded and non-terminal
             node_head = node_head.ucb_child_select(legal_plays)
-            determinized_state.play(node_head.play)
-            legal_plays = determinized_state.get_legal_plays(determinized_state.next_player)
+            determinized_state.play(node_head.arriving_play)
+            legal_plays = determinized_state.get_legal_plays()
 
         # Expansion
         untried_plays = node_head.untried_plays(legal_plays)
@@ -342,7 +393,7 @@ def ismcts(perspective: cs.Perspective, itermax: int = 100, verbose=True, biased
 
         # Simulation
         while determinized_state.next_calltype == cs.CallType.PLAY:
-            legal_plays = determinized_state.get_legal_plays(determinized_state.next_player)
+            legal_plays = determinized_state.get_legal_plays()
             determinized_state.play(random.choice(legal_plays))
 
         # Backpropagation
@@ -351,6 +402,7 @@ def ismcts(perspective: cs.Perspective, itermax: int = 100, verbose=True, biased
             node_head = node_head.parent
 
     if verbose:
-        print(root_node.tree_info())
+        print(root_node.tree_info(), file=sys.stderr)
 
-    return max(root_node.children, key=lambda child: child.visits).arriving_play
+    best_node = max(root_node.children, key=lambda child: child.visits)
+    return best_node.arriving_play
