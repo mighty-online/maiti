@@ -359,7 +359,7 @@ def copy_list(original: list) -> list:
     return copied
 
 
-def ismcts(perspective: cs.Perspective, itermax: int = 100, verbose=True, biased=False) -> cs.Play:
+def ismcts(perspective: cs.Perspective, itermax: int = 100, verbose=False, biased=False) -> cs.Play:
     """Performs an ISMCTS search from the given perspective and returns the best move after itermax iterations."""
 
     root_node = InfoSet()

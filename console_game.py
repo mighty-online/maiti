@@ -131,7 +131,8 @@ ai_players = [tempest.ismcts] * 5
 ##############################################
 
 
-def play_game(ai_bidder_functions=None,
+def play_game(ai_num=5,
+              ai_bidder_functions=None,
               ai_miss_deal_caller_functions=None,
               ai_exchanger_functions=None,
               ai_friend_caller_functions=None,
@@ -157,14 +158,14 @@ def play_game(ai_bidder_functions=None,
             print(*args, **kwargs)
 
     global space
-    while True:
-        ai_num = '5'
-        # ai_num = input("How many AI agents?: ")
-        print()
-        if ai_num.isdigit() and int(ai_num) in range(6):
-            ai_num = int(ai_num)
-            break
-        print("Invalid input.")
+    if ai_num is None:
+        while True:
+            ai_num = input("How many AI agents?: ")
+            print()
+            if ai_num.isdigit() and int(ai_num) in range(6):
+                ai_num = int(ai_num)
+                break
+            print("Invalid input.")
 
     if ai_num == 5:  # Just to see how long a randomized game lasts.
         start = time()
@@ -365,13 +366,13 @@ def play_game(ai_bidder_functions=None,
                 print2(play)
             print2()
             print2("Player {}'s turn to play.".format(player))
-            print2(mighty_game.hands[player])
 
             perspective = mighty_game.get_perspective(player)
 
             if player in ai_player_numbers:
                 play = ai_player_functions[player](perspective)
             else:
+                print2(mighty_game.hands[player])
                 valid_plays = mighty_game.get_legal_plays()
                 print("Choose a play from below by index:")
                 for i in range(len(valid_plays)):
@@ -445,8 +446,17 @@ def play_game(ai_bidder_functions=None,
         end = time()
         assert start is not None
         print1(f"The 5 AI game took {end - start} seconds to complete.")
-    return mighty_game.gamepoints_rewarded
+
+    wins = []
+    var1 = 1 if mighty_game.declarer_won else 0
+    var2 = 0 if mighty_game.declarer_won else 1
+    for player in range(5):
+        if player in (mighty_game.declarer, mighty_game.friend):
+            wins.append(var1)
+        else:
+            wins.append(var2)
+    return wins, mighty_game.gamepoints_rewarded
 
 
 if __name__ == '__main__':
-    play_game(ai_bidders, ai_miss_deal_callers, ai_exchangers, ai_friend_callers, ai_players)
+    play_game(4, ai_bidders, ai_miss_deal_callers, ai_exchangers, ai_friend_callers, ai_players)
