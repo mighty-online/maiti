@@ -24,7 +24,7 @@ def random_random_player(pers: cs.Perspective) -> cs.Play:
     """A very random AI player of Mighty."""
 
     valid_moves = cs.legal_plays(pers.player, pers.hand, pers.completed_tricks, pers.current_trick,
-                                 pers.suit_led, pers.trump, pers.next_calltype, pers.leader)
+                                 pers.trump, pers.next_calltype, pers.leader)
 
     return random.choice(valid_moves)
 

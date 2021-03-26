@@ -23,7 +23,7 @@ class GameState(engine.GameEngine):
     This class is not meant to cover the early stages of the game before the tricks."""
 
     def __init__(self, hands, kitty, point_cards, completed_tricks, trick_winners, current_trick, previous_suit_leds,
-                 suit_led, declarer, trump, bid, friend, called_friend, friend_just_revealed):
+                 declarer, trump, bid, friend, called_friend, friend_just_revealed):
         super().__init__()
 
         self.hands = hands
@@ -35,7 +35,6 @@ class GameState(engine.GameEngine):
         self.trick_winners = trick_winners
         self.current_trick = current_trick
         self.previous_suit_leds = previous_suit_leds
-        self.suit_led = suit_led
 
         self.declarer = declarer
         self.trump = trump
@@ -65,7 +64,7 @@ class GameState(engine.GameEngine):
         kitty_copy = deepcopy(kitty)
         return cls(hands_copy, kitty_copy, deepcopy(perspective.point_cards), deepcopy(perspective.completed_tricks),
                    perspective.trick_winners[:], deepcopy(perspective.current_trick),
-                   deepcopy(perspective.previous_suit_leds), deepcopy(perspective.suit_led), perspective.declarer,
+                   deepcopy(perspective.previous_suit_leds), perspective.declarer,
                    deepcopy(perspective.trump), perspective.bid, perspective.friend,
                    deepcopy(perspective.called_friend), perspective.friend_just_revealed)
 
