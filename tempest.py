@@ -61,13 +61,13 @@ class GameState(engine.GameEngine):
 
     @classmethod
     def from_perspective(cls, perspective, hands, kitty):
-        pers_copy = deepcopy(perspective)
         hands_copy = deepcopy(hands)
         kitty_copy = deepcopy(kitty)
-        return cls(hands_copy, kitty_copy, pers_copy.point_cards, pers_copy.completed_tricks,
-                   pers_copy.trick_winners, pers_copy.current_trick, pers_copy.previous_suit_leds,
-                   pers_copy.suit_led, pers_copy.declarer, pers_copy.trump, pers_copy.bid,
-                   pers_copy.friend, pers_copy.called_friend, pers_copy.friend_just_revealed)
+        return cls(hands_copy, kitty_copy, deepcopy(perspective.point_cards), deepcopy(perspective.completed_tricks),
+                   perspective.trick_winners[:], deepcopy(perspective.current_trick),
+                   deepcopy(perspective.previous_suit_leds), deepcopy(perspective.suit_led), perspective.declarer,
+                   deepcopy(perspective.trump), perspective.bid, perspective.friend,
+                   deepcopy(perspective.called_friend), perspective.friend_just_revealed)
 
 
 # This should be all the inferences for all the players grouped adequately
