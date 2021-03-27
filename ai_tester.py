@@ -21,7 +21,7 @@ ai_players = [weak_player] * 4 + [strong_player]
 total = np.zeros(5)
 for i in range(100):
     print(f"{i=}")
-    wins, gamepoints = console_game.play_game(ai_player_functions=ai_players, verbose=1)
+    wins, gamepoints, points, declarer_hand = console_game.play_game(ai_player_functions=ai_players, verbose=1)
     total += np.array(wins)
     print(total)
 

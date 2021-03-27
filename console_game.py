@@ -6,6 +6,7 @@ from game_logic import engine
 from game_logic import constructs as cs
 from time import time
 import tempest
+from copy import deepcopy
 
 space = 100
 card_mode = 0  # 0 for standard card string, 1 for unicode representations
@@ -30,12 +31,12 @@ def random_random_player(pers: cs.Perspective) -> cs.Play:
 
 
 def random_random_bidder(pers: cs.Perspective) -> tuple:
+    """A very random AI bidder of Mighty"""
     hand = pers.hand
     minimum_bid = pers.minimum_bid
     highest_bid = pers.highest_bid
     prev_trump = pers.trump_candidate
 
-    """A very random AI bidder of Mighty"""
     # Note that you can call one less with a no-trump
     suit_counts = {}
     for suit in Suit.iter():
@@ -63,11 +64,84 @@ def random_random_bidder(pers: cs.Perspective) -> tuple:
     return None, 0
 
 
+def less_random_bidder(pers: cs.Perspective) -> tuple:
+    """A less random AI bidder of Mighty"""
+    hand = pers.hand
+    minimum_bid = pers.minimum_bid
+    highest_bid = pers.highest_bid
+    prev_trump = pers.trump_candidate
+
+    # Note that you can call one less with a no-trump
+    suit_counts = {}
+    for suit in Suit.iter():
+        count = 0
+        for card in hand:
+            if card.suit == suit:
+                count += 1
+        suit_counts[suit.val] = count
+
+    maximum_suit_num = max(suit_counts.values())
+    trump = None
+    for suit_val in suit_counts:
+        if suit_counts[suit_val] == maximum_suit_num:
+            trump = Suit(suit_val)
+
+    if maximum_suit_num < 4:
+        return None, 0
+    elif maximum_suit_num == 4:
+        max_bid = 14
+    elif maximum_suit_num == 5:
+        max_bid = 16
+    elif maximum_suit_num == 6:
+        max_bid = 18
+    else:
+        max_bid = 19
+
+    if any(card == pers.mighty for card in hand):
+        max_bid += 1
+    if any(card.is_joker() for card in hand):
+        max_bid += 1
+
+    max_bid = min(max_bid, 20)
+
+    for bid in range(1, max_bid):
+        if cs.is_valid_bid(trump, bid, minimum_bid, prev_trump=prev_trump, highest_bid=highest_bid):
+            if random.random() < 0.8:
+                return trump, bid
+
+    return None, 0
+
+
+def selected_bidder(pers: cs.Perspective, selected) -> tuple:
+    if not selected:
+        return None, 0
+    hand = pers.hand
+
+    # Note that you can call one less with a no-trump
+    suit_counts = {}
+    for suit in Suit.iter():
+        count = 0
+        for card in hand:
+            if card.suit == suit:
+                count += 1
+        suit_counts[suit.val] = count
+
+    maximum_suit_num = max(suit_counts.values())
+    trump = None
+    for suit_val in suit_counts:
+        if suit_counts[suit_val] == maximum_suit_num:
+            trump = Suit(suit_val)
+
+    return trump, 13
+
+
 def imma_call_miss_deal(pers: cs.Perspective) -> bool:
-    """Will always call miss-deal. That is, this function simply returns True."""
+    """Will always call miss-deal. That is, this function simply returns True.
+
+    Unless, you are the declarer."""
     hand = pers.hand
     trump = pers.trump
-    return True
+    return pers.declarer != pers.player
 
 
 def random_random_exchanger(pers: cs.Perspective) -> tuple:
@@ -76,6 +150,24 @@ def random_random_exchanger(pers: cs.Perspective) -> tuple:
     trump = pers.trump
     random.shuffle(hand)
     return hand[:3], trump
+
+
+def less_random_exchanger(pers: cs.Perspective) -> tuple:
+    """Returns three cards to discard and the trump to change to, on a very random basis."""
+    hand = pers.hand
+    trump = pers.trump
+
+    non_trump_cards = [card for card in hand if
+                       (card.suit != trump and not card.is_joker() and not card == pers.mighty)]
+    non_trump_cards.sort(key=lambda card: card.rank.power())
+
+    discard = non_trump_cards[:3]
+    extra = 3 - len(discard)
+    if extra:
+        sorted_hand = sorted([card for card in hand if card.suit == trump], key=lambda card: card.rank.power())
+        discard += sorted_hand[:extra]
+
+    return discard, trump
 
 
 def mighty_joker_trump_friend_caller(pers: cs.Perspective) -> cs.FriendCall:
@@ -121,9 +213,9 @@ def introduce_hands(hands: list, players: list) -> None:
 
 ################### SETUP ####################
 
-ai_bidders = [random_random_bidder] * 5
+ai_bidders = [less_random_bidder] * 5
 ai_miss_deal_callers = [imma_call_miss_deal] * 5
-ai_exchangers = [random_random_exchanger] * 5
+ai_exchangers = [less_random_exchanger] * 5
 ai_friend_callers = [mighty_joker_trump_friend_caller] * 5
 ai_players = [tempest.ismcts] * 5
 
@@ -180,6 +272,8 @@ def play_game(ai_num=5,
         if ai_players_seed[i]:
             ai_player_numbers.append(i)
 
+    ai_declarer_random = random.choice(ai_player_numbers)
+
     human_players = [p for p in range(5) if p not in ai_player_numbers]
     if len(human_players) == 1:
         space = 0
@@ -192,6 +286,8 @@ def play_game(ai_num=5,
     mighty_game = engine.GameEngine()
     feedback = -1
     final_trump = None
+
+    declarer_hand = None
 
     introduce_hands(mighty_game.hands, human_players)
 
@@ -218,6 +314,10 @@ def play_game(ai_num=5,
             if mighty_game.next_bidder in ai_player_numbers:
                 trump, bid = ai_bidder_functions[mighty_game.next_bidder](
                     mighty_game.get_perspective(mighty_game.next_bidder))
+                '''
+                trump, bid = selected_bidder(mighty_game.get_perspective(mighty_game.next_bidder),
+                                             mighty_game.next_bidder == ai_declarer_random)
+                '''
             else:
                 print("To pass, enter 0 for the bid.")
                 while True:
@@ -270,6 +370,7 @@ def play_game(ai_num=5,
 
             print2('Exchange over.')
             feedback = mighty_game.exchange(mighty_game.declarer, to_discard)
+            declarer_hand = deepcopy(mighty_game.hands[mighty_game.declarer])
 
         elif call_type == cs.CallType.TRUMP_CHANGE:
             for hand in mighty_game.hands:
@@ -455,7 +556,7 @@ def play_game(ai_num=5,
             wins.append(var1)
         else:
             wins.append(var2)
-    return wins, mighty_game.gamepoints_rewarded
+    return wins, mighty_game.gamepoints_rewarded, mighty_game.declarer_team_points, declarer_hand
 
 
 if __name__ == '__main__':

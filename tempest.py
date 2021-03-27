@@ -17,12 +17,17 @@ from functools import reduce
 import sys
 
 
+# TODO: Make use of inferences
+# TODO: Make inference from friend call
+# TODO: implement statistics based bidder/exchanger
+
+
 class GameState(engine.GameEngine):
     """The class for a state of the Mighty game, in its 'play' stage.
 
     This class is not meant to cover the early stages of the game before the tricks."""
 
-    def __init__(self, hands, kitty, point_cards, completed_tricks, trick_winners, current_trick, previous_suit_leds,
+    def __init__(self, hands, kitty, point_cards, completed_tricks, trick_winners, current_trick,
                  declarer, trump, bid, friend, called_friend, friend_just_revealed):
         super().__init__()
 
@@ -34,7 +39,6 @@ class GameState(engine.GameEngine):
         self.completed_tricks = completed_tricks
         self.trick_winners = trick_winners
         self.current_trick = current_trick
-        self.previous_suit_leds = previous_suit_leds
 
         self.declarer = declarer
         self.trump = trump
@@ -64,7 +68,7 @@ class GameState(engine.GameEngine):
         kitty_copy = deepcopy(kitty)
         return cls(hands_copy, kitty_copy, deepcopy(perspective.point_cards), deepcopy(perspective.completed_tricks),
                    perspective.trick_winners[:], deepcopy(perspective.current_trick),
-                   deepcopy(perspective.previous_suit_leds), perspective.declarer,
+                   perspective.declarer,
                    deepcopy(perspective.trump), perspective.bid, perspective.friend,
                    deepcopy(perspective.called_friend), perspective.friend_just_revealed)
 
@@ -89,10 +93,10 @@ class Inferences:
             trick = tricks[trick_num]
 
             # The block below adequately finds the suit_led for the trick
-            if trick_num < len(pers.previous_suit_leds):
-                suit_led = pers.previous_suit_leds[trick_num]
+            if trick_num < len(pers.completed_tricks):
+                suit_led = pers.completed_tricks[trick_num][0].suit_led
             else:
-                suit_led = pers.suit_led
+                suit_led = pers.current_trick.suit_led
 
             for play in trick:
                 player, card = play.player, play.card
@@ -359,7 +363,7 @@ def copy_list(original: list) -> list:
     return copied
 
 
-def ismcts(perspective: cs.Perspective, itermax: int = 100, verbose=False, biased=False) -> cs.Play:
+def ismcts(perspective: cs.Perspective, itermax: int = 50, verbose=False, biased=False) -> cs.Play:
     """Performs an ISMCTS search from the given perspective and returns the best move after itermax iterations."""
 
     root_node = InfoSet()
